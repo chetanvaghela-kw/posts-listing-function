@@ -95,27 +95,29 @@ function custom_load_more_posts_callback() {
 				// phpcs:ignore
 				// $post_categories = get_the_terms( $get_blog_id, 'CATEGORY_SLUG' );	// UPDATE A SLUG OF CATEGORY FOR POST TYPE		
 				?>
-				<li>					
-					<a href="<?php echo esc_url( get_the_permalink( $get_blog_id ) ); ?>">
-						<?php if ( has_post_thumbnail( $get_blog_id ) ) : ?>
-							<?php
-							$large_image_url = wp_get_attachment_image_src( get_post_thumbnail_id( $get_blog_id ), 'large' );
-							?>
-							<img src="<?php echo esc_url( $large_image_url[0] ); ?>" alt="Default Image">
-						<?php else : ?>
-							<img src="<?php echo esc_url( $get_post_img ); ?>" alt="Default Image">
-						<?php endif; ?>
-					</a>
-					<div>
-						<h3>
-							<a href="<?php echo esc_url( get_the_permalink( $get_blog_id ) ); ?>">
-								<?php echo wp_kses_post( get_the_title( $get_blog_id ) ); ?>
-							</a>
-						</h3>
-						<p><?php echo wp_kses_post( wp_trim_words( get_the_excerpt( $get_blog_id ), 20, '...' ) ); ?></p>
+				<div class="col-sm-4 mt-4">
+					<div class="card">
+						<a href="<?php echo esc_url( get_permalink( $get_blog_id ) ); ?>">
+							<?php if ( has_post_thumbnail( $get_blog_id ) ) : ?>
+								<?php
+								$large_image_url = wp_get_attachment_image_src( get_post_thumbnail_id( $get_blog_id ), 'large' );
+								?>
+								<img class="card-img-top" src="<?php echo esc_url( $large_image_url[0] ); ?>" alt="Image">
+								<?php else : ?>
+								<img class="card-img-top" src="<?php echo esc_url( $get_post_img ); ?>" alt="Placeholder">
+								<?php endif; ?>
+							</a>							
+							<div class="card-body">
+									<h5 class="card-title">
+									<a href="<?php echo esc_url( get_permalink( $get_blog_id ) ); ?>">
+										<?php echo esc_html( get_the_title( $get_blog_id ) ); ?>
+									</a>
+								</h5>
+								<p class="card-text"><?php echo esc_html( wp_trim_words( get_the_excerpt( $get_blog_id ), 20, '...' ) ); ?></p>
+								<a class="btn btn-primary" href="<?php echo esc_url( get_permalink() ); ?>"><?php esc_html_e( 'View', 'text-domain' ); ?></a>
+							</div>
 					</div>
-					<a href="<?php echo esc_url( get_the_permalink() ); ?>"><?php esc_html_e( 'View', 'text-domain' ); ?></a>
-				</li>
+				</div>				
 				<?php
 			}
 			$output   = ob_get_clean();
@@ -144,8 +146,6 @@ add_action( 'wp_ajax_nopriv_custom_load_more_posts', 'custom_load_more_posts_cal
  * @param string $classname class name.
  */
 function custom_pagination_numeric( $cquery = array(), $classname = '' ) {
-
-	add_filter( 'wp_kses_allowed_html', 'steun_allow_svg_in_wp_kses_post', 10, 1 );
 
 	global $wp_query;
 	$cquery = ( ! empty( $cquery ) ) ? $cquery : $wp_query;
@@ -198,11 +198,14 @@ function custom_pagination_numeric( $cquery = array(), $classname = '' ) {
 /**
  * Custom Post Listing Function.
  *
- * @param string $post_type         Custom post type (default: 'post').
+ * @param string $get_post_type         Custom post type (default: 'post').
  * @param string $more_post_type    'pagination' or 'loadmore'.
  * @param int    $posts_per_page    Posts per page (optional).
  */
-function custom_post_listing( $post_type = 'post', $more_post_type = 'pagination', $posts_per_page = 3 ) {
+function custom_post_listing( $get_post_type = 'post', $more_post_type = 'pagination', $posts_per_page = 3 ) {
+
+	$get_post_type = ! empty( $get_post_type ) ? $get_post_type : get_post_type();
+
 	$default_posts_per_page = get_option( 'posts_per_page' );
 	$post_per_page          = ! empty( $posts_per_page ) ? $posts_per_page : $default_posts_per_page;
 
@@ -211,13 +214,13 @@ function custom_post_listing( $post_type = 'post', $more_post_type = 'pagination
 
 	// Detect if we are on archive (category, tag, taxonomy) and fetch terms.
 	$term_query = get_queried_object();
-	$is_archive = is_category() || is_tag() || is_tax();
 
+	$is_archive = is_category() || is_tag() || is_tax();
 	// If not using default WP_Query (like single template or you pass a different post_type)
 	// We manually create a new query if post_type is not default 'post' or when not using the default loop.
-	if ( ! is_main_query() || ( get_post_type() !== $post_type && ! $is_archive ) ) {
+	if ( ! is_main_query() || ( get_post_type() !== $get_post_type && ! $is_archive ) ) {
 		$args = array(
-			'post_type'      => $post_type,
+			'post_type'      => $get_post_type,
 			'posts_per_page' => $post_per_page,
 			'paged'          => $current_page,
 		);
@@ -241,53 +244,94 @@ function custom_post_listing( $post_type = 'post', $more_post_type = 'pagination
 		$post_per_page = ! empty( $default_posts_per_page ) ? $default_posts_per_page : $post_per_page;
 	}
 
+	if ( 'loadmore-with-filter' === $more_post_type ) :
+		$taxonomies = get_object_taxonomies( $get_post_type, 'objects' );
+		$taxonomy   = ''; // Default taxonomy.
+		foreach ( $taxonomies as $tax ) {
+			if ( $tax->public && $tax->show_ui ) {
+				$taxonomy = $tax->name;
+				break;
+			}
+		}
+
+		$categories = array();
+		if ( $taxonomy ) {
+			$categories = get_terms(
+				array(
+					'taxonomy'   => $taxonomy,
+					'hide_empty' => true,
+					'exclude'    => array( 1 ),
+				)
+			);
+		}
+
+		if ( ! empty( $categories ) ) :
+			?>
+			<div class="blog-filter row p-3">
+				<ul class="nav nav-pills">
+					<li class="nav-item"><button type="button" class="active get-category-posts nav-link" data-term_id="0" data-term_slug="all">All</button></li>
+					<?php
+					foreach ( $categories as $category ) :
+						echo '<li class="nav-item"><button class="get-category-posts nav-link"  type="button" data-term_id="' . esc_attr( $category->term_id ) . '" data-term_slug="' . esc_attr( $category->slug ) . '">' . esc_html( $category->name ) . '</button></li>';
+					endforeach;
+					?>
+				</ul>
+			</div>
+			<?php
+		endif;
+	endif;
+
 	if ( $posts_query->have_posts() ) :
 		?>
-		<ul class="posts-listing-wrap" id="custom-post-container">
+		<div class="posts-listing-wrap row p-3" id="custom-post-container">
 			<?php
 			$get_post_img = get_template_directory_uri() . '/assets/images/placeholder/placeholder.webp';
 			while ( $posts_query->have_posts() ) :
 				$posts_query->the_post();
 				$get_blog_id = get_the_ID();
 				?>
-				<li>
-					<a href="<?php echo esc_url( get_permalink( $get_blog_id ) ); ?>">
-						<?php if ( has_post_thumbnail( $get_blog_id ) ) : ?>
-							<?php
-							$large_image_url = wp_get_attachment_image_src( get_post_thumbnail_id( $get_blog_id ), 'large' );
-							?>
-							<img src="<?php echo esc_url( $large_image_url[0] ); ?>" alt="Image">
-						<?php else : ?>
-							<img src="<?php echo esc_url( $get_post_img ); ?>" alt="Placeholder">
-						<?php endif; ?>
-					</a>
-					<div>
-						<h3>
-							<a href="<?php echo esc_url( get_permalink( $get_blog_id ) ); ?>">
-								<?php echo esc_html( get_the_title( $get_blog_id ) ); ?>
-							</a>
-						</h3>
-						<p><?php echo esc_html( wp_trim_words( get_the_excerpt( $get_blog_id ), 20, '...' ) ); ?></p>
+				<div class="col-sm-4 mt-4">
+					<div class="card">
+						<a href="<?php echo esc_url( get_permalink( $get_blog_id ) ); ?>">
+							<?php if ( has_post_thumbnail( $get_blog_id ) ) : ?>
+								<?php
+								$large_image_url = wp_get_attachment_image_src( get_post_thumbnail_id( $get_blog_id ), 'large' );
+								?>
+								<img class="card-img-top" src="<?php echo esc_url( $large_image_url[0] ); ?>" alt="Image">
+								<?php else : ?>
+								<img class="card-img-top" src="<?php echo esc_url( $get_post_img ); ?>" alt="Placeholder">
+								<?php endif; ?>
+							</a>							
+							<div class="card-body">
+									<h5 class="card-title">
+									<a href="<?php echo esc_url( get_permalink( $get_blog_id ) ); ?>">
+										<?php echo esc_html( get_the_title( $get_blog_id ) ); ?>
+									</a>
+								</h5>
+								<p class="card-text"><?php echo esc_html( wp_trim_words( get_the_excerpt( $get_blog_id ), 20, '...' ) ); ?></p>
+								<a class="btn btn-primary" href="<?php echo esc_url( get_permalink() ); ?>"><?php esc_html_e( 'View', 'text-domain' ); ?></a>
+							</div>
 					</div>
-					<a href="<?php echo esc_url( get_permalink() ); ?>"><?php esc_html_e( 'View', 'text-domain' ); ?></a>
-				</li>
+				</div>
 				<?php
 			endwhile;
 			?>
-		</ul>
+		</div>
 
 		<?php if ( 'pagination' === $more_post_type ) : ?>
 			<?php custom_pagination_numeric( $posts_query ); ?>
 		<?php elseif ( 'loadmore' === $more_post_type && $posts_query->found_posts > $post_per_page ) : ?>
-			<div class="posts-load-more-wrap">
-				<a href="javascript:void(0);" class="posts-load-more-items-btn">
-					<?php esc_html_e( 'Load More', 'text-domain' ); ?>
-				</a>
-				<input type="hidden" class="posts-load-more-page" value="1">
-				<input type="hidden" class="posts-load-per-page" value="<?php echo esc_attr( $post_per_page ); ?>">
-				<input type="hidden" class="posts-load-categoty" value="<?php echo esc_attr( $term_query->term_id ?? '' ); ?>">
-				<input type="hidden" class="posts-load-taxonomy" value="<?php echo esc_attr( $term_query->taxonomy ?? 'category' ); ?>">
-				<input type="hidden" class="posts-load-post_type" value="<?php echo esc_attr( $post_type ); ?>">
+			<div class="posts-load-more-wrap row">
+				<div class="col-2 mx-auto">
+					<a href="javascript:void(0);" class="posts-load-more-items-btn btn btn-primary">
+						<?php esc_html_e( 'Load More', 'text-domain' ); ?>
+					</a>
+					<input type="hidden" class="posts-load-more-page" value="1">
+					<input type="hidden" class="posts-load-per-page" value="<?php echo esc_attr( $post_per_page ); ?>">
+					<input type="hidden" class="posts-load-categoty" value="<?php echo esc_attr( $term_query->term_id ?? '' ); ?>">
+					<input type="hidden" class="posts-load-taxonomy" value="<?php echo esc_attr( $term_query->taxonomy ?? 'category' ); ?>">
+					<input type="hidden" class="posts-load-post_type" value="<?php echo esc_attr( $get_post_type ); ?>">
+				</div>
 			</div>
 		<?php elseif ( 'scroll' === $more_post_type ) : ?>
 			<div class="posts-load-more-scroll"></div>
@@ -296,17 +340,27 @@ function custom_post_listing( $post_type = 'post', $more_post_type = 'pagination
 			<input type="hidden" class="posts-load-per-page" value="<?php echo esc_attr( $post_per_page ); ?>">
 			<input type="hidden" class="posts-load-categoty" value="<?php echo esc_attr( $term_query->term_id ?? '' ); ?>">
 			<input type="hidden" class="posts-load-taxonomy" value="<?php echo esc_attr( $term_query->taxonomy ?? 'category' ); ?>">
-			<input type="hidden" class="posts-load-post_type" value="<?php echo esc_attr( $post_type ); ?>">
+			<input type="hidden" class="posts-load-post_type" value="<?php echo esc_attr( $get_post_type ); ?>">
+		<?php elseif ( 'loadmore-with-filter' === $more_post_type ) : ?>
+
+			<div class="row">
+				<div class="col-2 mx-auto">
+					<a href="javascript:void(0);" data-term_slug="all" data-term_id=""  data-taxonomy="<?php echo esc_attr( $taxonomy ?? 'category' ); ?>"  data-post_type="<?php echo esc_attr( $get_post_type ); ?>" class="custom-load-more-btn btn btn-primary" style="<?php echo $posts_query->found_posts > $post_per_page ? '' : 'display:none;'; ?>" >
+						<?php esc_html_e( 'Load More', 'text-domain' ); ?>
+					</a>
+					<input type="hidden" class="custom-load-more-page" value="1">
+				</div>
+			</div>
+
 		<?php endif; ?>
 
 		<?php
-	else :
-		?>
+		else :
+			?>
 		<div class="container">
 			<p><?php esc_html_e( 'Posts not available.', 'text-domain' ); ?></p>
 		</div>
-		<?php
+			<?php
 	endif;
-
-	wp_reset_postdata();
+		wp_reset_postdata();
 }
